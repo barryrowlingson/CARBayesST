@@ -1,5 +1,6 @@
 poisson.CARanova <- function(formula, data=NULL, W, interaction=TRUE, burnin, n.sample, thin=1,  prior.mean.beta=NULL, prior.var.beta=NULL, prior.tau2=NULL, verbose=TRUE)
 {
+
 #### Check on the verbose option
      if(is.null(verbose)) verbose=TRUE     
      if(!is.logical(verbose)) stop("the verbose option is not logical.", call.=FALSE)
@@ -10,8 +11,6 @@ poisson.CARanova <- function(formula, data=NULL, W, interaction=TRUE, burnin, n.
      a<-proc.time()
      }else{}
   
-     
-     
 ##############################################
 #### Format the arguments and check for errors
 ##############################################
@@ -119,10 +118,9 @@ lambda <- runif(1)
     if(interaction)
     {
     gamma <- rnorm(n=(N*K), mean=0, sd = 2*sd(res.temp))
-    tau2.gamma <- runif(1, min=var(res.temp)/2, max=var(res.temp)*2) 
+    tau2.gamma <- runif(1, min=var(res.temp)/2, max=var(res.temp)*2)
     }else
     {}
-
 
 #### Check and specify the priors
 ## Put in default priors
@@ -365,6 +363,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
       {
           proposal.beta[beta.beg[r]:beta.fin[r]] <- proposal[beta.beg[r]:beta.fin[r]]
           prob <- poissonbetaupdate(X.standardised, N.all, p, beta, proposal.beta, offset.temp, Y, prior.mean.beta, prior.var.beta)
+          if(is.na(prob))break
           if(prob > runif(1))
           {
               beta[beta.beg[r]:beta.fin[r]] <- proposal.beta[beta.beg[r]:beta.fin[r]]
@@ -374,7 +373,10 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
               proposal.beta[beta.beg[r]:beta.fin[r]] <- beta[beta.beg[r]:beta.fin[r]]
           }
       }
-      
+      if(is.na(prob)){
+          message("Breaking out after ",j," iterations.")
+          break
+      }
       accept[2] <- accept[2] + n.beta.block    
       regression.mat <- matrix(X.standardised %*% beta, nrow=K, ncol=N, byrow=FALSE)   
       

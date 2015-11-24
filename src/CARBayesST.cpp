@@ -229,12 +229,14 @@ double poissonbetaupdate(NumericMatrix X, const int nsites, const int p, Numeric
     oldlikebit += y[j] * lp_current[j] -  exp(lp_current[j]);
     newlikebit += y[j] * lp_proposal[j] - exp(lp_proposal[j]);
   }
+
   likebit = newlikebit - oldlikebit;
   
   // Create the prior acceptance component
   for(int j = 0; j < p; j++) priorbit += 0.5 * pow((beta[j]-prior_meanbeta[j]),2) / prior_varbeta[j] - 0.5 * pow((proposal[j]-prior_meanbeta[j]),2) / prior_varbeta[j];
   
   // Compute the acceptance probability and return the value
+  
   acceptance = exp(likebit + priorbit);
   return acceptance;
 }
