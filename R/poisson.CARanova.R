@@ -109,15 +109,15 @@ if(length(interaction) != 1) stop("interaction must be of length 1.", call.=FALS
 beta <- glm(Y~X.standardised-1, offset=offset, family=poisson)$coefficients
 regression.vec <- X.standardised %*% beta
 res.temp <- log.Y - regression.vec - offset
-phi <- rnorm(n=K, mean=0, sd = 2*sd(res.temp))
-delta <- rnorm(n=N, mean=0, sd = 2*sd(res.temp))
+phi <- 0 * rnorm(n=K, mean=0, sd = 2*sd(res.temp)) / 10
+delta <- 0 * rnorm(n=N, mean=0, sd = 2*sd(res.temp)) / 10 
 tau2.phi <- runif(1, min=var(res.temp)/2, max=var(res.temp)*2)
 tau2.delta <- runif(1, min=var(res.temp)/2, max=var(res.temp)*2)
 rho <- runif(1)  
 lambda <- runif(1)  
     if(interaction)
     {
-    gamma <- rnorm(n=(N*K), mean=0, sd = 2*sd(res.temp))
+    gamma <- 0 * rnorm(n=(N*K), mean=0, sd = 2*sd(res.temp)) / 10
     tau2.gamma <- runif(1, min=var(res.temp)/2, max=var(res.temp)*2)
     }else
     {}
@@ -126,7 +126,12 @@ lambda <- runif(1)
 ## Put in default priors
     if(is.null(prior.mean.beta)) prior.mean.beta <- rep(0, p)
     if(is.null(prior.var.beta)) prior.var.beta <- rep(1000, p)
-    if(is.null(prior.tau2)) prior.tau2 <- c(0.001, 0.001)
+    if(is.null(prior.tau2)) prior.tau2 <- list(
+        gamma=c(0.001, 0.001),
+        phi=c(0.001, 0.001),
+        delta=c(0.001, 0.001)
+        )
+        
 
     if(length(prior.mean.beta)!=p) stop("the vector of prior means for beta is the wrong length.", call.=FALSE)    
     if(!is.numeric(prior.mean.beta)) stop("the vector of prior means for beta is not numeric.", call.=FALSE)    
@@ -137,9 +142,12 @@ lambda <- runif(1)
     if(sum(is.na(prior.var.beta))!=0) stop("the vector of prior variances for beta has missing values.", call.=FALSE)    
     if(min(prior.var.beta) <=0) stop("the vector of prior variances has elements less than zero", call.=FALSE)
 
-    if(length(prior.tau2)!=2) stop("the prior value for tau2 is the wrong length.", call.=FALSE)    
-    if(!is.numeric(prior.tau2)) stop("the prior value for tau2 is not numeric.", call.=FALSE)    
-    if(sum(is.na(prior.tau2))!=0) stop("the prior value for tau2 has missing values.", call.=FALSE)    
+    if(length(prior.tau2)!=3) stop("the prior value for tau2 is the wrong length.", call.=FALSE)    
+    if(!all(sort(names(prior.tau2))==c("delta","gamma","phi"))){
+        stop("prior.tau2 doesnt have the right names")
+    }
+    #if(!is.numeric(prior.tau2)) stop("the prior value for tau2 is not numeric.", call.=FALSE)    
+    #if(sum(is.na(prior.tau2))!=0) stop("the prior value for tau2 has missing values.", call.=FALSE)    
 
 
 
@@ -220,13 +228,13 @@ proposal.sd.rho <- 0.02
 proposal.sd.lambda <- 0.02
 proposal.corr.beta <- solve(t(X.standardised) %*% X.standardised)
 chol.proposal.corr.beta <- chol(proposal.corr.beta)   
-tau2.phi.shape <- prior.tau2[1] + K/2
-tau2.delta.shape <- prior.tau2[1] + N/2
+tau2.phi.shape <- prior.tau2$phi[1] + K/2
+tau2.delta.shape <- prior.tau2$delta[1] + N/2
 
     if(interaction)
     {
     proposal.sd.gamma <- 0.1
-    tau2.gamma.shape <- prior.tau2[1] + N*K/2
+    tau2.gamma.shape <- prior.tau2$gamma[1] + N*K/2
     }else
     {
     }
@@ -374,8 +382,15 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
           }
       }
       if(is.na(prob)){
-          message("Breaking out after ",j," iterations.")
-          break
+          message("Error in beta sampling after ",j," iterations.")
+          samples.rhoext <- cbind(samples.rho, samples.lambda)
+          if(interaction){
+              gamma=mcmc(samples.gamma)
+          }else{
+              gamma="No interaction"
+          }
+          samples <- list(betaRescale=mcmc(samples.beta), phi=mcmc(samples.phi),  delta=mcmc(samples.delta), gamma=gamma, tau2=mcmc(samples.tau2), rho=mcmc(samples.rhoext))
+          return(list(samples=samples))
       }
       accept[2] <- accept[2] + n.beta.block    
       regression.mat <- matrix(X.standardised %*% beta, nrow=K, ncol=N, byrow=FALSE)   
@@ -425,7 +440,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     #########################
     ## Sample from tau2.gamma
     #########################
-    tau2.gamma.scale <- prior.tau2[2]  + sum(gamma.mat^2)/2
+    tau2.gamma.scale <- prior.tau2$gamma[2]  + sum(gamma.mat^2)/2
     tau2.gamma <- 1 / rgamma(1, tau2.gamma.shape, scale=(1/tau2.gamma.scale)) 
     }else
     {}
@@ -436,7 +451,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     ## Sample from tau2.phi
     #######################
     temp2.phi <- quadform(W.triplet, W.triplet.sum, W.n.triplet, K, phi, phi, rho)
-    tau2.phi.scale <- temp2.phi + prior.tau2[2] 
+    tau2.phi.scale <- temp2.phi + prior.tau2$phi[2] 
     tau2.phi <- 1 / rgamma(1, tau2.phi.shape, scale=(1/tau2.phi.scale))
     
     
@@ -444,7 +459,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     ## Sample from tau2.delta
     #########################
     temp2.delta <- quadform(D.triplet, D.triplet.sum, D.n.triplet, N, delta, delta, lambda)
-    tau2.delta.scale <- temp2.delta + prior.tau2[2] 
+    tau2.delta.scale <- temp2.delta + prior.tau2$delta[2] 
     tau2.delta <- 1 / rgamma(1, tau2.delta.shape, scale=(1/tau2.delta.scale))
 
     
