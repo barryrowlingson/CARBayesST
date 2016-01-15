@@ -103,7 +103,8 @@ return tau2_posteriorscale;
 List poissoncarupdate(NumericMatrix Wtriplet, NumericMatrix Wbegfin, 
      NumericVector Wtripletsum, const int nsites, NumericVector phi, 
      double tau2, const NumericMatrix y, const double phi_tune, 
-     double rho, NumericMatrix offset, const int ntime, NumericVector mult_offset)
+		      double rho, NumericMatrix offset, const int ntime, NumericVector mult_offset,
+		      NumericMatrix missind)
 {
 // Update the spatially correlated random effects 
 //Create new objects
@@ -144,8 +145,8 @@ phinew = phi;
         {
         lpold = mult_offset[i] * phinew[j] + offset(j, i);
         lpnew = mult_offset[i] * propphi + offset(j, i); 
-        oldlikebit = oldlikebit + y(j,i) * lpold - exp(lpold);
-        newlikebit = newlikebit + y(j,i) * lpnew - exp(lpnew);
+        oldlikebit = missind(j,i) * (oldlikebit + y(j,i) * lpold - exp(lpold));
+        newlikebit = missind(j,i) * (newlikebit + y(j,i) * lpnew - exp(lpnew));
         }       
       acceptance = exp(oldpriorbit - newpriorbit - oldlikebit + newlikebit);
           if(runif(1)[0] <= acceptance) 
@@ -169,7 +170,8 @@ return out;
 
 // [[Rcpp::export]]
 List poissonindepupdate(const int nsites, NumericVector theta,double tau2, 
-const NumericVector y, const double theta_tune, NumericVector offset)
+			const NumericVector y, const double theta_tune, NumericVector offset,
+			NumericVector missind)
 {
 // Update the spatially independent random effects 
 //Create new objects
@@ -190,8 +192,8 @@ thetanew = theta;
       priorbit = (0.5/tau2) * (pow(thetanew[j], 2) - pow(proptheta, 2));
       lpold = thetanew[j] + offset[j];
       lpnew = proptheta + offset[j];
-      oldlikebit = lpold * y[j]  - exp(lpold);
-      newlikebit =  lpnew * y[j]  - exp(lpnew);
+      oldlikebit = missind[j] * (lpold * y[j]  - exp(lpold));
+      newlikebit = missind[j] * ( lpnew * y[j]  - exp(lpnew));
       acceptance = exp(priorbit - oldlikebit + newlikebit);
           if(runif(1)[0] <= acceptance) 
           {
@@ -215,7 +217,8 @@ return out;
 // [[Rcpp::export]]
 double poissonbetaupdate(NumericMatrix X, const int nsites, const int p, NumericVector beta, 
                          NumericVector proposal, NumericVector offset, NumericVector y, 
-                         NumericVector prior_meanbeta, NumericVector prior_varbeta)
+                         NumericVector prior_meanbeta, NumericVector prior_varbeta,
+			 NumericVector missind)
 {
   // Compute the acceptance probability for beta
   //Create new objects
@@ -226,8 +229,8 @@ double poissonbetaupdate(NumericMatrix X, const int nsites, const int p, Numeric
   lp_current  = linpredcompute(X, nsites, p, beta, offset);
   lp_proposal = linpredcompute(X, nsites, p, proposal, offset);     
   for(int j = 0; j < nsites; j++){
-    oldlikebit += y[j] * lp_current[j] -  exp(lp_current[j]);
-    newlikebit += y[j] * lp_proposal[j] - exp(lp_proposal[j]);
+    oldlikebit += missind[j] * (y[j] * lp_current[j] -  exp(lp_current[j]));
+    newlikebit += missind[j] * (y[j] * lp_proposal[j] - exp(lp_proposal[j]));
   }
 
   likebit = newlikebit - oldlikebit;
@@ -336,7 +339,8 @@ return out;
 List binomialcarupdate(NumericMatrix Wtriplet, NumericMatrix Wbegfin, 
      NumericVector Wtripletsum, const int nsites, NumericVector phi, 
      double tau2, const NumericMatrix y,  const NumericMatrix failures, const double phi_tune, 
-     double rho, NumericMatrix offset, const int ntime, NumericVector mult_offset)
+		       double rho, NumericMatrix offset, const int ntime, NumericVector mult_offset,
+		       NumericVector missind)
 {
 // Update the spatially correlated random effects 
 //Create new objects

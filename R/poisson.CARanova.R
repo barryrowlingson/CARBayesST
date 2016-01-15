@@ -26,6 +26,7 @@ X <- try(suppressWarnings(model.matrix(object=attr(frame, "terms"), data=frame))
      if(sum(is.na(X))>0) stop("the covariate matrix contains missing 'NA' values.", call.=FALSE)
 
 N.all <- nrow(X)
+n <- nrow(X)
 p <- ncol(X)
     
 ## Check for linearly related columns
@@ -66,14 +67,22 @@ X.indicator <- rep(NA, p)       # To determine which parameter estimates to tran
 
 #### Response variable
 Y <- model.response(frame)
-    if(sum(is.na(Y))>0) stop("the response has missing 'NA' values.", call.=FALSE)
-    if(!is.numeric(Y)) stop("the response variable has non-numeric values.", call.=FALSE)
-int.check <- N.all-sum(ceiling(Y)==floor(Y))
-    if(int.check > 0) stop("the respons variable has non-integer values.", call.=FALSE)
-    if(min(Y)<0) stop("the response variable has negative values.", call.=FALSE)
-Y <- as.numeric(Y)
-log.Y <- log(Y)
-log.Y[Y==0] <- -0.1  
+
+     which.miss <- as.numeric(!is.na(Y))
+     n.miss <- n - sum(which.miss)
+     Y.miss <- Y
+     Y.miss[which.miss==0] <- median(Y, na.rm=TRUE)
+     
+     #if(sum(is.na(Y))>0) stop("the response has missing 'NA' values.", call.=FALSE)
+     if(!is.numeric(Y)) stop("the response variable has non-numeric values.", call.=FALSE)
+     int.check <- all(ceiling(Y)==floor(Y), na.rm=TRUE)
+     if(!int.check) stop("the respons variable has non-integer values.", call.=FALSE)
+     if(min(Y, na.rm=TRUE)<0) stop("the response variable has negative values.", call.=FALSE)
+
+     #Y <- as.numeric(Y)
+     # log.Y is used for initial parameters
+     log.Y <- log(Y.miss)
+     log.Y[Y.miss==0] <- -0.1  
 
      
 #### Offset variable
@@ -329,8 +338,10 @@ det.Q.D <-  0.5 * sum(log((lambda * Dstar.val + (1-lambda))))
 #### Specify quantities that do not change
 offset.mat <- matrix(offset, nrow=K, ncol=N, byrow=FALSE) 
 regression.mat <- matrix(X.standardised %*% beta, nrow=K, ncol=N, byrow=FALSE)   
-Y.mat <- matrix(Y, nrow=K, ncol=N, byrow=FALSE)
+Y.mat <- matrix(Y.miss, nrow=K, ncol=N, byrow=FALSE)
+which.miss.mat <- matrix(which.miss, nrow=K, ncol=N, byrow=FALSE)
 Y.mat.trans <- t(Y.mat)
+which.miss.mat.trans <- t(which.miss.mat)
 phi.mat <- matrix(rep(phi, N), byrow=F, nrow=K)
 delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
   
@@ -370,7 +381,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
       for(r in 1:n.beta.block)
       {
           proposal.beta[beta.beg[r]:beta.fin[r]] <- proposal[beta.beg[r]:beta.fin[r]]
-          prob <- poissonbetaupdate(X.standardised, N.all, p, beta, proposal.beta, offset.temp, Y, prior.mean.beta, prior.var.beta)
+          prob <- poissonbetaupdate(X.standardised, N.all, p, beta, proposal.beta, offset.temp, Y.miss, prior.mean.beta, prior.var.beta, which.miss)
           if(is.na(prob))break
           if(prob > runif(1))
           {
@@ -400,7 +411,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     ## Sample from phi
     ####################
     phi.offset <- offset.mat + regression.mat + delta.mat + gamma.mat
-    temp1 <- poissoncarupdate(W.triplet, W.begfin, W.triplet.sum, K, phi, tau2.phi, Y.mat, proposal.sd.phi, rho, phi.offset, N, rep(1,N))
+    temp1 <- poissoncarupdate(W.triplet, W.begfin, W.triplet.sum, K, phi, tau2.phi, Y.mat, proposal.sd.phi, rho, phi.offset, N, rep(1,N), which.miss.mat)
     phi <- temp1[[1]]
     phi <- phi - mean(phi)
     phi.mat <- matrix(rep(phi, N), byrow=F, nrow=K)    
@@ -413,7 +424,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     ## Sample from delta
     ####################
     delta.offset <- t(offset.mat + regression.mat + phi.mat + gamma.mat)
-    temp2 <- poissoncarupdate(D.triplet, D.begfin, D.triplet.sum, N, delta, tau2.delta, Y.mat.trans, proposal.sd.delta, lambda, delta.offset, K, rep(1,K))
+    temp2 <- poissoncarupdate(D.triplet, D.begfin, D.triplet.sum, N, delta, tau2.delta, Y.mat.trans, proposal.sd.delta, lambda, delta.offset, K, rep(1,K), which.miss.mat.trans)
     delta <- temp2[[1]]
     delta <- delta - mean(delta)
     delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
@@ -429,7 +440,7 @@ delta.mat <- matrix(rep(delta, K), byrow=T, nrow=K)
     ####################
     gamma.offset <- offset.mat + regression.mat + phi.mat +  delta.mat
     gamma.offset.vec <- as.numeric(gamma.offset)
-    temp5 <- poissonindepupdate(N.all, gamma, tau2.gamma, Y, proposal.sd.gamma, gamma.offset.vec)
+    temp5 <- poissonindepupdate(N.all, gamma, tau2.gamma, Y.miss, proposal.sd.gamma, gamma.offset.vec, which.miss)
     gamma <- temp5[[1]]
     gamma <- gamma - mean(gamma)
     gamma.mat <- matrix(gamma, byrow=F, nrow=K)
